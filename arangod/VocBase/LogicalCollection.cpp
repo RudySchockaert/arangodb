@@ -2062,6 +2062,28 @@ int LogicalCollection::insert(Transaction* trx, VPackSlice const slice,
   operation.setRevisions(DocumentDescriptor(),
                          DocumentDescriptor(revisionId, doc.begin()));
 
+  try {
+    insertRevision(revisionId, marker->vpack(), 0, true);
+  } catch (basics::Exception const& ex) {
+    res = ex.code();
+  } catch (std::bad_alloc const&) {
+    res = TRI_ERROR_OUT_OF_MEMORY;
+  } catch (...) {
+    res = TRI_ERROR_INTERNAL;
+  }
+  if (res != TRI_ERROR_NO_ERROR) {
+    try {
+      removeRevision(revisionId, false);
+    } catch (basics::Exception const& ex) {
+      res = ex.code();
+    } catch (std::bad_alloc const&) {
+      res = TRI_ERROR_OUT_OF_MEMORY;
+    } catch (...) {
+      res = TRI_ERROR_INTERNAL;
+    }
+    return res;
+  }
+
   {
     // use lock
     bool const useDeadlockDetector =
@@ -2070,8 +2092,6 @@ int LogicalCollection::insert(Transaction* trx, VPackSlice const slice,
                                                      lock);
 
     try {
-      insertRevision(revisionId, marker->vpack(), 0, true);
-
       // insert into indexes
       res = insertDocument(trx, revisionId, doc, operation, marker,
                            options.waitForSync);
